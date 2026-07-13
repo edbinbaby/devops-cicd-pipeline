@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Build and Deploy Docker Image
 
 on:
   push:
@@ -26,3 +26,23 @@ jobs:
       - name: Push Docker Image
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest
+
+            docker stop devops-app || true
+            docker rm devops-app || true
+
+            docker run -d \
+              --name devops-app \
+              --restart unless-stopped \
+              -p 5000:80 \
+              ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest
+
+            systemctl restart nginx
