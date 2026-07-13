@@ -1,22 +1,55 @@
-script: |
-  whoami
-  hostname
+name: Build and Deploy Docker Image
 
-  docker --version
+on:
+  push:
+    branches:
+      - main
 
-  docker pull ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest
+jobs:
+  docker:
+    runs-on: ubuntu-latest
 
-  docker stop devops-app || true
-  docker rm devops-app || true
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-  docker run -d \
-    --name devops-app \
-    --restart unless-stopped \
-    -p 5000:80 \
-    ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-  docker ps
+      - name: Build Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest .
 
-  curl http://localhost:5000
+      - name: Push Docker Image
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest
 
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            whoami
+            hostname
 
+            docker --version
+
+            docker pull ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest
+
+            docker stop devops-app || true
+            docker rm devops-app || true
+
+            docker run -d \
+              --name devops-app \
+              --restart unless-stopped \
+              -p 5000:80 \
+              ${{ secrets.DOCKER_USERNAME }}/devops-cicd-pipeline:latest
+
+            docker ps
+
+            curl http://localhost:5000
